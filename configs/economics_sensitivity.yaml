@@ -1,0 +1,93 @@
+# economics_sensitivity.yaml -- how much of the answer is the price assumptions?
+#
+# THE QUESTION
+#   A cost-per-kilogram ranking is only as good as the prices behind it, and
+#   nobody knows what a flight-qualified NTP stage costs, because nobody has
+#   bought one. If the ranking flips between an optimistic reusable-hardware
+#   model and a conservative expendable one, then the study's economic
+#   conclusion is a restatement of its price assumptions and must be reported
+#   that way.
+#
+# THE DESIGN
+#   Policies are held FIXED and only the cost model varies. Every cell uses a
+#   scripted controller with zero training budget, so:
+#     * the physics of each episode is identical across cost models (same seeds,
+#       same deterministic policy, same trajectory), and
+#     * the only thing moving between cells is the pricing.
+#   Any difference in $/kg is therefore attributable entirely to the cost model,
+#   which is exactly what a sensitivity study needs and what including a
+#   learning agent would destroy -- a retrained policy would produce different
+#   trajectories and confound price sensitivity with policy variance.
+#
+#   Because the trajectories are identical across the cost-model axis, the
+#   analysis's paired comparisons across seeds are exactly paired here, and the
+#   $/kg differences are essentially noise-free. Read the ranking table per cost
+#   model and check whether the ordering of pairings is stable:
+#     propulsion-rl analyze --sweep economics_sensitivity
+#
+#   propulsion-rl run --config configs/economics_sensitivity.yaml --workers 4
+
+name: economics_sensitivity
+description: >
+  Fixed scripted policies, swept price assumptions. Isolates how much of the
+  economic ranking is driven by the cost model rather than by the propulsion
+  system or the controller.
+
+# --- the axes ----------------------------------------------------------------
+propulsion: all
+missions: all
+
+# Scripted controllers only. These have learns == False, so the runner gives
+# them no training budget at all and runs them through the identical evaluation
+# path. Deterministic policies mean the trajectory is a function of the episode
+# seed alone.
+#
+# Three of them rather than one, because a price assumption can favour a
+# thrust-hungry policy over a propellant-hoarding one, and a sensitivity study
+# that used a single policy could not see that.
+agents:
+  - prograde       # naive: burn along the velocity vector, full throttle
+  - max_isp        # propellant-optimal end of the envelope, slow
+  - life_aware     # trades performance for hardware life -- the policy whose
+                   # ranking should be most sensitive to refurbishment pricing
+
+# THE SWEPT AXIS. Three bracketing sets of price assumptions:
+#   reusable      -- optimistic: hardware amortised over many flights
+#   reference     -- the middle case used everywhere else in the study
+#   conservative  -- expendable hardware, full capex on every mission
+cost_models:
+  - reusable
+  - reference
+  - conservative
+
+# --- protocol ----------------------------------------------------------------
+# Five seeds is plenty: with deterministic policies the only variance is the
+# environment's own episode randomisation, and the cost-model comparison is
+# paired within a seed.
+seeds: 5
+
+# No training. Set explicitly rather than left to the runner's inference, so the
+# intent is visible in the config: this sweep does not train anything.
+train_steps: 0
+eval_interval: 0
+val_episodes: 1
+
+# More test episodes than usual, since they are cheap here (no training) and
+# they tighten the CIs on the cost figures, which is the whole point.
+eval_episodes: 30
+
+report_policy: final
+selection_metric: neg_cost_per_kg
+
+env:
+  max_episode_steps: 20000
+
+results_dir: results
+workers: 4
+
+# Telemetry is redundant here -- the trajectories repeat across the cost-model
+# axis by construction -- and turning it off keeps the sweep's disk footprint
+# proportional to what it actually measures.
+save_telemetry: false
+
+allow_implausible: false

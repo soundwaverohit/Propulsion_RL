@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "propulsion-rl"
+version = "0.1.0"
+description = "A benchmark for pairing reinforcement learning methods with spacecraft propulsion systems"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Rohit" }]
+keywords = ["reinforcement-learning", "propulsion", "electric-propulsion", "nuclear-propulsion", "astrodynamics"]
+
+# Deliberately minimal. The environment, the physics and the RL algorithms are
+# implemented against numpy/scipy/torch only, so the benchmark runs without
+# gymnasium or stable-baselines3 installed. Those are cross-validation extras.
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "torch>=2.0",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.7", "seaborn>=0.12"]
+gym = ["gymnasium>=0.29"]
+sb3 = ["gymnasium>=0.29", "stable-baselines3>=2.2"]
+evo = ["cma>=3.3"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4", "mypy>=1.8"]
+
+[project.scripts]
+propulsion-rl = "propulsion_rl.experiments.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: takes more than a few seconds",
+    "integration: exercises more than one subsystem",
+    "physics: validates a model against a published reference value",
+]
+
+[tool.ruff]
+line-length = 92
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["N803", "N806"]   # physics notation: uppercase locals like T, P, Isp
+
+[tool.coverage.run]
+source = ["src/propulsion_rl"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "raise NotImplementedError", "if TYPE_CHECKING:"]

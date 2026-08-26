@@ -1,0 +1,72 @@
+# smoke.yaml -- the whole pipeline in miniature.
+#
+# Purpose: CI, and the `propulsion-rl demo` command. Everything here is sized so
+# that a new user runs it in well under a minute on a laptop and sees a real
+# results table, a real ranking with confidence intervals, and a real Pareto
+# front come out the other end.
+#
+# It is NOT a scientific configuration. The budgets are two orders of magnitude
+# too small to train anything, and three seeds is too few to claim a winner --
+# the analysis will say so out loud in its caveat line. That is deliberate: the
+# smoke config exercises the machinery, and it should be obvious that it is
+# doing nothing else.
+#
+#   propulsion-rl demo
+#   propulsion-rl run --config configs/smoke.yaml --workers 2
+
+name: smoke
+description: >
+  Tiny end-to-end sweep. Two propulsion systems from opposite families, one
+  mission, three controllers spanning scripted and learned. Exists to prove the
+  pipeline runs, not to measure anything.
+
+# --- the axes ----------------------------------------------------------------
+# One electric and one nuclear system, so the interaction analysis has two
+# levels on the propulsion factor and can actually run.
+propulsion:
+  - hall_spt100
+  - ntp_pewee
+
+missions:
+  - leo_geo_transfer
+
+# A random policy (the floor every method must clear), a scripted controller
+# (the reference an RL method has to beat to justify itself), and one learner.
+agents:
+  - random
+  - max_thrust
+  - ppo
+
+cost_models:
+  - reference
+
+# --- protocol ----------------------------------------------------------------
+# Three seeds. Real sweeps use five or more; see electric_vs_nuclear.yaml.
+seeds: 3
+
+# Environment steps of training per learning agent. Scripted agents receive
+# none -- the runner zeroes their budget -- but the identical eval protocol.
+train_steps: 400
+
+# Periodic validation, used only to choose the best checkpoint. Reported
+# numbers come from the disjoint test seed band.
+eval_interval: 200
+val_episodes: 3
+
+# Held-out test episodes behind every reported number.
+eval_episodes: 4
+
+# "best" reports the checkpoint that scored highest on the validation band;
+# "final" reports the end-of-budget policy. Both are always in the results row
+# as best_* and final_* columns regardless of this setting.
+report_policy: best
+selection_metric: return
+
+env:
+  # Short episodes keep the smoke run to seconds. A real study lets the mission
+  # decide when it is over.
+  max_episode_steps: 60
+
+results_dir: results
+workers: 1
+save_telemetry: true

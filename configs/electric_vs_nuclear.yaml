@@ -1,0 +1,123 @@
+# electric_vs_nuclear.yaml -- the main experiment.
+#
+# The full matrix: every controller against every propulsion system on every
+# mission, minus the pairings the plausibility rules refuse to run (see
+# `propulsion-rl list --rules`, and results/<sweep>/excluded.csv after a run).
+#
+# This is the configuration whose output answers the study's question. Read the
+# protocol notes in propulsion_rl/experiments/runner.py before changing any of
+# the budget numbers below: they are what makes the comparison fair, not
+# arbitrary hyperparameters.
+#
+#   propulsion-rl run --config configs/electric_vs_nuclear.yaml --workers 8
+#   propulsion-rl analyze --sweep electric_vs_nuclear
+#   propulsion-rl plot --sweep electric_vs_nuclear
+#
+# Cost note: 8 propulsion x 4 missions x 14 agents x 8 seeds is ~3600 cells
+# before exclusions, and the learning cells dominate. Expect hours, not minutes.
+# The sweep is resumable -- rerunning skips every cell that already has results,
+# so killing it and restarting later costs nothing.
+
+name: electric_vs_nuclear
+description: >
+  The headline comparison. All registered agents against all registered
+  propulsion systems across all four missions, at budgets large enough for the
+  learning methods to be represented fairly, with eight seeds so the paired
+  tests have power.
+
+# --- the axes ----------------------------------------------------------------
+# "all" resolves against the registries at expansion time, so a propulsion
+# system added later joins the sweep without editing this file.
+propulsion: all
+missions: all
+agents: all
+
+# Both bracketing price models. The reference model is the middle case; running
+# reusable and conservative alongside it means the economics conclusions are
+# reported as a range rather than as a single set of price assumptions dressed
+# up as fact. Add "reusable" here to widen the bracket at 1.5x the cell count.
+cost_models:
+  - reference
+  - conservative
+
+# --- protocol ----------------------------------------------------------------
+# Eight seeds. Five is the floor for a paired bootstrap to say anything; eight
+# buys enough power to separate methods that are genuinely 10-20% apart, which
+# is the effect size this comparison cares about.
+seeds: 8
+
+# The equal budget: every learning agent gets exactly this many ENVIRONMENT
+# steps. Not equal wall-clock, not equal gradient updates. Changing this number
+# changes every run_id and therefore invalidates the whole cache, on purpose.
+train_steps: 300000
+
+# Validation cadence for checkpoint selection. 15 points on a learning curve is
+# enough to see the shape without spending a meaningful fraction of the budget
+# on evaluation (evaluation steps are counted separately and never charged
+# against train_steps, but they still cost wall-clock).
+eval_interval: 20000
+val_episodes: 8
+
+# Held-out test episodes. Twenty per cell x eight seeds = 160 episodes behind
+# every reported mean, which is what keeps the bootstrap CIs narrow enough to
+# resolve anything.
+eval_episodes: 20
+
+report_policy: best
+selection_metric: return
+
+# --- per-agent adjustments ---------------------------------------------------
+# These override the *protocol* only where an agent's cost structure makes the
+# uniform setting nonsensical. They never change the environment-step budget:
+# that is the one number every learning method shares.
+per_agent:
+  # CEM-MPC does not learn; it plans, expensively, at every single step. Its
+  # env-step budget is irrelevant (the runner zeroes it if the agent reports
+  # learns=False) but its evaluation is the same as everyone else's, just
+  # slower. Fewer validation episodes keeps a planner from dominating the
+  # sweep's wall-clock without changing what is reported.
+  cem_mpc:
+    val_episodes: 4
+  # CMA-ES learns at episode granularity, so a mid-episode checkpoint is
+  # meaningless; evaluate it less often and let it run.
+  cmaes:
+    eval_interval: 50000
+
+# --- agent hyperparameters ---------------------------------------------------
+# Deliberately close to each method's published defaults. Per-cell tuning would
+# make the comparison a tuning-effort comparison, which is the other classic way
+# these studies go wrong: whoever tuned hardest wins.
+agent_kwargs:
+  ppo:
+    lr: 0.0003
+    n_steps: 2048
+    gamma: 0.995
+  lagrangian_ppo:
+    lr: 0.0003
+    n_steps: 2048
+    gamma: 0.995
+    cost_limit: 0.0
+  sac:
+    lr: 0.0003
+    batch_size: 256
+    gamma: 0.995
+  td3:
+    lr: 0.0003
+    batch_size: 256
+    gamma: 0.995
+
+env:
+  # Let the mission decide when the episode is over; the wall is the mission's
+  # own max_duration_s. This cap only stops a pathological non-terminating run.
+  max_episode_steps: 20000
+
+results_dir: results
+workers: 8
+save_telemetry: true
+
+# --- exclusions --------------------------------------------------------------
+# The built-in physical-plausibility rules apply (allow_implausible: false is
+# the default). Add sweep-specific exclusions here; every one needs a reason,
+# and every one shows up in results/<sweep>/excluded.csv.
+exclude: []
+allow_implausible: false

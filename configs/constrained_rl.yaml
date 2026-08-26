@@ -1,0 +1,122 @@
+# constrained_rl.yaml -- one hypothesis, tested properly.
+#
+# HYPOTHESIS
+#   Constrained RL (Lagrangian PPO) earns its extra machinery specifically on
+#   nuclear systems, where the safety constraints are hard: a reactor has
+#   temperature and reactivity limits that are not "expensive to violate" but
+#   "mission over". On electric systems, whose binding limits are soft and
+#   mostly economic (throughput, wear, radiator margin), the same machinery
+#   should buy little or nothing over penalty-shaped PPO.
+#
+# WHY THIS IS A SEPARATE CONFIG
+#   The hypothesis is about an INTERACTION -- constrained-vs-unconstrained x
+#   nuclear-vs-electric -- not about a main effect. Testing it inside the big
+#   sweep would bury it under a few hundred other comparisons, and the
+#   Holm correction over that family would cost most of the power needed to see
+#   it. A focused matrix means a small comparison family and a real chance of a
+#   conclusive answer.
+#
+#   The analysis to run afterwards is the interaction one, not the ranking:
+#     propulsion-rl analyze --sweep constrained_rl
+#   and read the "is the best method the same everywhere?" block. If
+#   lagrangian_ppo wins on the nuclear systems and ties on the electric ones,
+#   and the interaction term clears Holm-corrected significance with a
+#   non-negligible partial eta-squared, the hypothesis survives. If it wins
+#   everywhere, the story is "constrained RL is just better here" and has
+#   nothing to do with nuclear. If it wins nowhere, say so.
+#
+#   propulsion-rl run --config configs/constrained_rl.yaml --workers 6
+
+name: constrained_rl
+description: >
+  Does constrained RL specifically beat unconstrained RL on nuclear propulsion,
+  where the safety limits are hard? A balanced 2x(2+2) design: constrained and
+  unconstrained learners, plus their scripted references, on two nuclear and two
+  electric systems.
+
+# --- the axes ----------------------------------------------------------------
+# Balanced by family: two nuclear, two electric. Balance matters here because
+# the ANOVA on the family x method interaction is the actual output, and an
+# unbalanced design turns that into an approximation.
+propulsion:
+  - ntp_pewee      # nuclear thermal: hard temperature and reactivity limits
+  - nep_brayton    # nuclear electric: reactor limits plus a power conversion loop
+  - hall_hermes    # electric: high power, soft wear-limited envelope
+  - ion_next       # electric: long-life, throughput-limited
+
+# Missions where the constraints actually bind. GEO station keeping is excluded
+# by the plausibility rules for nuclear anyway, and including it would leave the
+# nuclear half of the design with a hole in it.
+missions:
+  - leo_geo_transfer
+  - earth_mars_cargo
+  - mars_crew_fast
+
+agents:
+  # The method under test.
+  - lagrangian_ppo
+  # The control: identical algorithm family, constraints folded into the reward
+  # as a penalty instead of handled explicitly. This is the comparison that
+  # isolates the constraint machinery; comparing lagrangian_ppo to SAC would
+  # confound it with everything else that differs between the two algorithms.
+  - ppo
+  # A second unconstrained learner, so a lagrangian_ppo win cannot be explained
+  # by "PPO happened to be weak on this problem".
+  - sac
+  # The scripted reference that respects limits by construction. If it beats
+  # every learner, the constrained-RL question is moot on this benchmark and
+  # the honest report says that instead.
+  - life_aware
+  # The floor: a controller that ignores limits entirely. Its constraint
+  # violation count calibrates what "hard" means on each system.
+  - max_thrust
+
+cost_models:
+  - reference
+
+# --- protocol ----------------------------------------------------------------
+# Ten seeds: more than the main sweep, because this config exists to resolve one
+# specific interaction and the interaction term is the noisiest thing in a
+# two-way design. Power comes from seeds, and seeds are cheaper than a wrong
+# conclusion.
+seeds: 10
+
+train_steps: 300000
+eval_interval: 25000
+val_episodes: 8
+eval_episodes: 20
+
+report_policy: best
+
+# Selection on success rate rather than return: a constrained method's whole
+# claim is that it completes the mission without breaking the hardware, and
+# return already contains the penalty term that the comparison is about. Picking
+# checkpoints on return would quietly select for the reward shaping rather than
+# for the behaviour under test.
+selection_metric: success
+
+agent_kwargs:
+  lagrangian_ppo:
+    lr: 0.0003
+    n_steps: 2048
+    gamma: 0.995
+    # A hard limit means a hard limit: the constrained agent targets zero
+    # expected constraint cost, not a small budget of violations.
+    cost_limit: 0.0
+    lagrange_lr: 0.035
+  ppo:
+    lr: 0.0003
+    n_steps: 2048
+    gamma: 0.995
+  sac:
+    lr: 0.0003
+    batch_size: 256
+    gamma: 0.995
+
+env:
+  max_episode_steps: 20000
+
+results_dir: results
+workers: 6
+save_telemetry: true
+allow_implausible: false
