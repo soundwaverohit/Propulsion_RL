@@ -1,0 +1,35 @@
+{
+  "sweep": "smoke",
+  "protocol_version": 3,
+  "finished": 1788367378.765568,
+  "wall_s": 4.985571249999339,
+  "n_cells": 18,
+  "n_rows": 18,
+  "n_cached": 9,
+  "n_failed": 0,
+  "workers": 1,
+  "report_policy": "best",
+  "selection_metric": "return",
+  "seed_bands": {
+    "train": [
+      0,
+      400000000
+    ],
+    "val": [
+      700000000,
+      800000000
+    ],
+    "test": [
+      900000000,
+      1000000000
+    ]
+  },
+  "platform": {
+    "python": "3.11.8",
+    "system": "Darwin",
+    "machine": "arm64",
+    "numpy": "2.4.6",
+    "torch": "2.14.0"
+  },
+  "excluded_pairings": []
+}

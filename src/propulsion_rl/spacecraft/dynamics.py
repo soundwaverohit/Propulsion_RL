@@ -940,3 +940,87 @@ def _rk45_arc(
             h = h_min
 
     return (rx, ry, rz, vx, vy, vz), True, accepted, worst
+
+
+# --- Step-size selection -----------------------------------------------------
+#: Fixed-step RK4 sub-intervals per orbital revolution.
+#:
+#: RK4 on a Keplerian orbit is not symplectic: its truncation error is
+#: systematically dissipative, so too coarse a step bleeds orbital energy and
+#: the trajectory spirals in on nothing but numerics. The error per revolution
+#: scales as ``(h/T)**4``, and 200 sub-intervals per revolution puts it around
+#: 1e-9 -- three orders of magnitude below the per-step effect of a low-thrust
+#: burn, which is the signal the benchmark exists to measure.
+#:
+#: This is the value behind :attr:`EnvConfig.substeps_per_orbit`; see
+#: :func:`substeps_for` for how it becomes a substep count.
+DEFAULT_SUBSTEPS_PER_ORBIT = 200
+
+#: Ceiling on the derived substep count, so a pathological state (a near-surface
+#: radius, a mission with a tiny ``mu``) cannot turn one macro-step into an
+#: unbounded amount of work.
+MAX_DERIVED_SUBSTEPS = 20_000
+
+
+def substeps_for(
+    radius_m: float,
+    mu: float,
+    dt_s: float,
+    *,
+    minimum: int = 10,
+    per_orbit: int = DEFAULT_SUBSTEPS_PER_ORBIT,
+    maximum: int = MAX_DERIVED_SUBSTEPS,
+) -> int:
+    """Sub-intervals needed to integrate *dt_s* without bleeding orbital energy.
+
+    The reference timescale is the circular orbital period at the current
+    radius, ``T = 2*pi*sqrt(r**3/mu)``. Using *r* rather than the semi-major
+    axis keeps this well defined on hyperbolic and near-escape states, where
+    ``a`` is negative or singular, and it is the conservative choice on an
+    ellipse because periapsis -- the fastest, most demanding part of the arc --
+    is where a coarse step actually does the damage.
+
+    A fixed substep count cannot serve this benchmark: one macro-step is 2/3 of
+    a revolution in LEO and under a thousandth of one in heliocentric cruise, so
+    the count has to follow the orbit rather than the wall clock.
+
+    Parameters
+    ----------
+    radius_m:
+        Current distance from the primary. Non-finite or non-positive values
+        fall back to *minimum*, leaving the caller's guard to reject the state.
+    mu:
+        Gravitational parameter of the primary, m^3/s^2.
+    dt_s:
+        Macro-step length to be covered.
+    minimum:
+        Floor on the result -- never integrate more coarsely than the caller's
+        configured baseline, even for a very slow orbit.
+    per_orbit:
+        Target sub-intervals per revolution.
+    maximum:
+        Ceiling on the result.
+
+    Returns
+    -------
+    int
+        Substep count in ``[minimum, maximum]``.
+
+    Examples
+    --------
+    >>> from propulsion_rl.core.constants import MU_EARTH, LEO_RADIUS
+    >>> substeps_for(LEO_RADIUS, MU_EARTH, 3600.0)   # ~5500 s period
+    130
+    >>> substeps_for(LEO_RADIUS, MU_EARTH, 60.0)     # short step, floor applies
+    10
+    """
+    dt = abs(float(dt_s))
+    if dt <= 0.0:
+        return int(minimum)
+    if not (math.isfinite(radius_m) and math.isfinite(mu)) or radius_m <= 0.0 or mu <= 0.0:
+        return int(minimum)
+    period_s = 2.0 * math.pi * math.sqrt(radius_m ** 3 / mu)
+    if not math.isfinite(period_s) or period_s <= 0.0:
+        return int(minimum)
+    needed = math.ceil(dt * per_orbit / period_s)
+    return int(min(max(needed, int(minimum)), int(maximum)))

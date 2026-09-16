@@ -1,0 +1,17 @@
+{
+  "protocol": 3,
+  "propulsion": "hall_spt100",
+  "mission": "leo_geo_transfer",
+  "agent": "random",
+  "cost_model": "reference",
+  "seed": 0,
+  "train_steps": 400,
+  "eval_episodes": 4,
+  "val_episodes": 3,
+  "eval_interval": 200,
+  "agent_kwargs": {},
+  "env_config": {
+    "max_episode_steps": 60
+  },
+  "slug": "random-hall_spt100-leo_geo_transfer-reference-s000-bdb288588ddf"
+}

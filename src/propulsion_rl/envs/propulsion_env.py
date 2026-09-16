@@ -26,6 +26,7 @@ spelled out rather than left to reading the code.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 from dataclasses import dataclass, replace
@@ -93,7 +94,16 @@ class EnvConfig:
         Append a :class:`Telemetry` row per step. Turn off for large sweeps
         where only the terminal result matters.
     substeps:
-        Integrator substeps handed to :func:`dynamics.propagate`.
+        Floor on the integrator substeps handed to :func:`dynamics.propagate`.
+        The actual count is derived per step from the local orbital period (see
+        ``substeps_per_orbit``) and is never below this.
+    substeps_per_orbit:
+        Target RK4 sub-intervals per orbital revolution. RK4 is not symplectic,
+        so a step that is coarse relative to the period bleeds orbital energy
+        and deorbits the vehicle on numerics alone; in LEO, where one macro-step
+        is most of a revolution, a fixed low count swamps the thrust effect the
+        benchmark is trying to measure. Set to 0 to disable the derivation and
+        use ``substeps`` verbatim.
     seed:
         Seed used by the first ``reset()`` that is not given one explicitly.
     obs_clip:
@@ -107,6 +117,7 @@ class EnvConfig:
     terminate_on_violation: bool = False
     record_telemetry: bool = True
     substeps: int = 10
+    substeps_per_orbit: int = dynamics.DEFAULT_SUBSTEPS_PER_ORBIT
     seed: int | None = None
     obs_clip: float = 10.0
 
@@ -289,7 +300,15 @@ class PropulsionEnv:
         self._rated_power_w = rated_w if math.isfinite(rated_w) and rated_w > 0 else 0.0
         self._self_powered = bool(propulsion.self_powered)
         self._warn_if_solar_distance_unset()
+        # The mission fixes the launched wet mass; the propulsion system's own
+        # dry mass has to come out of the propellant, or an 18 t reactor flies
+        # as if it weighed nothing and the cross-family comparison is a fiction.
+        with contextlib.suppress(Exception):
+            mission.account_for_propulsion(float(propulsion.bom().dry_mass_kg))
+
         self._substeps = int(self.config.substeps)
+        self._substeps_per_orbit = int(self.config.substeps_per_orbit)
+        self._mu = float(getattr(mission, "mu", 0.0) or 0.0)
         self._clip = clip
         self._do_clip = bool(self.config.normalize_obs)
         self._penalty_weight = float(self.config.constraint_penalty_weight)
@@ -508,6 +527,21 @@ class PropulsionEnv:
         bus.step(dt_s, draw_w, state, eclipse, distance_m)
 
         # 5 -- fly.
+        # The substep count follows the orbit, not the wall clock: one macro-step
+        # is a large fraction of a LEO revolution and a negligible fraction of a
+        # heliocentric one, and RK4's dissipative truncation error at a coarse
+        # step deorbits the vehicle on numerics alone.
+        substeps = (
+            dynamics.substeps_for(
+                state.radius_m,
+                self._mu,
+                dt_s,
+                minimum=self._substeps,
+                per_orbit=self._substeps_per_orbit,
+            )
+            if self._substeps_per_orbit > 0
+            else self._substeps
+        )
         next_state = dynamics.propagate(
             state,
             output.thrust_n,
@@ -515,7 +549,7 @@ class PropulsionEnv:
             output.mdot_kg_s,
             mission,
             dt_s,
-            substeps=self._substeps,
+            substeps=substeps,
         )
         next_state.power_available_w = available_w
         next_state.power_generated_w = float(bus.last_generated_w)

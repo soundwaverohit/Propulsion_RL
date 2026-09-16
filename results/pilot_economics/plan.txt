@@ -1,0 +1,9 @@
+sweep: pilot_economics
+cells: 90  (30 configurations x 3 seeds)
+training budget: 1,200,000 env steps
+evaluation episodes: 330
+  missions     (1): leo_geo_transfer
+  propulsion   (5): hall_hermes, hall_spt100, ion_next, ion_nstar, nep_kilopower
+  agents       (6): edelbaum, max_thrust, ppo, prograde, random, sac
+  cost_models  (1): reference
+  seeds        (3): 0, 1, 2

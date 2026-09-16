@@ -401,7 +401,7 @@ class EarthMarsCargo(_HeliocentricTransfer):
         state = VehicleState(
             position_m=pos,
             velocity_m_s=vel,
-            dry_mass_kg=self.stage_dry_mass_kg,
+            dry_mass_kg=self.total_dry_mass_kg,
             propellant_kg=self.propellant_capacity_kg,
             payload_kg=self.payload_kg,
             t_s=0.0,

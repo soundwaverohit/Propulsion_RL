@@ -102,6 +102,7 @@ class GEOStationKeeping(Mission):
     """
 
     name = "geo_station_keeping"
+    dry_mass_attr = "bus_dry_mass_kg"
     mu = MU_EARTH
     frame = "planetocentric"
 
@@ -225,7 +226,7 @@ class GEOStationKeeping(Mission):
         state = VehicleState(
             position_m=pos,
             velocity_m_s=vel,
-            dry_mass_kg=self.bus_dry_mass_kg,
+            dry_mass_kg=self.total_dry_mass_kg,
             propellant_kg=self.propellant_capacity_kg,
             payload_kg=self.payload_kg,
             t_s=0.0,

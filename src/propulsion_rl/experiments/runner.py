@@ -766,6 +766,7 @@ def evaluate(
     The caller is responsible for having frozen and synchronised normalisation
     before calling; :func:`run_cell` always does.
     """
+    attach_planning_env(agent, env)
     summary = EvalSummary()
     counters: dict[str, float] = {}
     t0 = time.perf_counter()
@@ -816,6 +817,8 @@ def run_cell(spec: ExperimentSpec, cfg: RunnerConfig) -> dict[str, Any]:
 
     train_env = build_env(spec, seed=trn_seeds[0], training=True, cfg=cfg)
     eval_env = build_env(spec, seed=val_seeds[0], training=False, cfg=cfg)
+    bind_observation_labels(agent, train_env)
+    attach_planning_env(agent, train_env)
     # The evaluation environment's normaliser never updates. Full stop.
     froze = set_norm_training(eval_env, False)
     if cfg.normalize_obs and not froze:
@@ -918,6 +921,7 @@ def run_cell(spec: ExperimentSpec, cfg: RunnerConfig) -> dict[str, Any]:
     reloaded = False
     if train_steps > 0 and best_at_step != train_env_steps:
         best_agent = make_agent(spec)
+        bind_observation_labels(best_agent, eval_env)
         if load_checkpoint(cell / "best", best_agent, eval_env):
             reloaded = True
             set_norm_training(eval_env, False)
@@ -1029,6 +1033,64 @@ def make_agent(spec: ExperimentSpec) -> Agent:
     with contextlib.suppress(Exception):
         agent.set_seed(_AGENT_SEED_OFFSET + int(spec.seed))
     return agent
+
+
+def bind_observation_labels(agent: Agent, env: Any) -> None:
+    """Tell a scripted controller what the observation channels mean.
+
+    Scripted baselines read the observation *semantically* -- Edelbaum needs the
+    inclination error, the life-aware controller needs wear -- so they have to
+    resolve channel names to indices. Their fallback layout is a documented
+    guess, and it is not the layout this package's environment emits; steering
+    on it silently reads the wrong entry for almost every channel, which makes
+    the scripted reference line meaningless and, since that line is what the RL
+    methods are scored against, the comparison meaningless with it.
+
+    The agent is constructed before the environment (see :func:`make_agent`), so
+    this is a separate call rather than a constructor argument. Learned agents
+    have no such notion and are left untouched.
+    """
+    binder = getattr(agent, "bind_observation_labels", None)
+    if binder is None:
+        return
+    labels = getattr(env, "observation_labels", None)
+    while labels is None and hasattr(env, "env"):   # peel any wrappers
+        env = env.env
+        labels = getattr(env, "observation_labels", None)
+    if labels is None:
+        logger.debug("%s: no observation_labels on the env; keeping defaults",
+                     type(agent).__name__)
+        return
+    binder(tuple(labels))
+
+    # Labels say where each channel is; scales say what its units were before
+    # the mission normalised it. A steering law needs both.
+    scale_binder = getattr(agent, "bind_observation_scales", None)
+    mission = getattr(env, "mission", None)
+    if scale_binder is not None and mission is not None:
+        with contextlib.suppress(Exception):
+            scale_binder(mission.observation_scales())
+
+
+def attach_planning_env(agent: Agent, env: Any) -> None:
+    """Hand a planner the live environment it plans against.
+
+    ``CEMMPCAgent(model="oracle")`` scores candidate action sequences by
+    deep-copying the environment it is acting in and rolling it forward, so it
+    needs the *live* object, re-attached whenever the environment changes --
+    training and evaluation use different instances, and a plan made against a
+    stale copy would be scored from the wrong state.
+
+    Without this the oracle planner silently degrades to a fixed prograde
+    action, which is not the method the results table would be naming.
+    A planner that declines the environment (one that cannot be deep-copied)
+    has said so itself and falls back on its own terms; that is not an error.
+    """
+    setter = getattr(agent, "set_env", None)
+    if setter is None:
+        return
+    with contextlib.suppress(Exception):
+        setter(env)
 
 
 def seed_all(replicate: int) -> None:
@@ -1401,6 +1463,7 @@ def evaluate_checkpoint(
     agent = make_agent(spec)
     seeds = test_episode_seeds(replicate, spec.eval_episodes)
     env = build_env(spec, seed=seeds[0], training=False, cfg=cfg)
+    bind_observation_labels(agent, env)
     load_checkpoint(ckpt_dir, agent, env)
     set_norm_training(env, False)
     max_ep = int(cfg.max_episode_steps or 1_000_000)
@@ -1457,6 +1520,8 @@ __all__ = [
     "EpisodeRecord",
     "EvalSummary",
     "RunnerConfig",
+    "attach_planning_env",
+    "bind_observation_labels",
     "build_env",
     "evaluate",
     "evaluate_checkpoint",

@@ -1,0 +1,15 @@
+{
+  "protocol": 3,
+  "propulsion": "ion_nstar",
+  "mission": "leo_geo_transfer",
+  "agent": "max_thrust",
+  "cost_model": "reference",
+  "seed": 2,
+  "train_steps": 40000,
+  "eval_episodes": 2,
+  "val_episodes": 1,
+  "eval_interval": 20000,
+  "agent_kwargs": {},
+  "env_config": {},
+  "slug": "max_thrust-ion_nstar-leo_geo_transfer-reference-s002-2ad0abddd5ea"
+}

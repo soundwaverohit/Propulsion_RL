@@ -1,0 +1,78 @@
+{
+  "sweep": "pilot_gto",
+  "protocol_version": 3,
+  "finished": 1788376156.659071,
+  "wall_s": 15.842227041983278,
+  "n_cells": 72,
+  "n_rows": 72,
+  "n_cached": 60,
+  "n_failed": 0,
+  "workers": 4,
+  "report_policy": "best",
+  "selection_metric": "return",
+  "seed_bands": {
+    "train": [
+      0,
+      400000000
+    ],
+    "val": [
+      700000000,
+      800000000
+    ],
+    "test": [
+      900000000,
+      1000000000
+    ]
+  },
+  "platform": {
+    "python": "3.11.8",
+    "system": "Darwin",
+    "machine": "arm64",
+    "numpy": "2.4.6",
+    "torch": "2.14.0"
+  },
+  "excluded_pairings": [
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "edelbaum",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    },
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "max_thrust",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    },
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "prograde",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    },
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "random",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    },
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "ppo",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    },
+    {
+      "propulsion": "nep_kilopower",
+      "mission": "gto_geo_transfer",
+      "agent": "sac",
+      "rule": "mass_budget_does_not_close",
+      "reason": "The propulsion system's own dry mass, charged against the mission's fixed launched wet mass, leaves no useful propellant. The vehicle cannot be built, so no controller can fly it; excluding the cell is the honest alternative to reporting a failure that is structural rather than behavioural. Arithmetic exclusion from each system's bill of materials."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "pilot_gto",
+  "description": "Cost per kilogram delivered to GEO from a launcher GTO drop-off, by propulsion system, across scripted and learned controllers. Three seeds and a small training budget: a pilot, not a result to publish.\n",
+  "propulsion": [
+    "hall_hermes",
+    "hall_spt100",
+    "ion_next",
+    "ion_nstar",
+    "nep_kilopower"
+  ],
+  "missions": [
+    "gto_geo_transfer"
+  ],
+  "agents": [
+    "edelbaum",
+    "max_thrust",
+    "prograde",
+    "random",
+    "ppo",
+    "sac"
+  ],
+  "cost_models": [
+    "reference"
+  ],
+  "seeds": 3,
+  "train_steps": 40000,
+  "eval_episodes": 2,
+  "val_episodes": 1,
+  "eval_interval": 20000,
+  "per_agent": {},
+  "agent_kwargs": {},
+  "env": {},
+  "exclude": [],
+  "include_only": [],
+  "allow_implausible": false,
+  "report_policy": "best",
+  "selection_metric": "return",
+  "results_dir": "results",
+  "workers": 4,
+  "save_telemetry": false,
+  "source": "configs/pilot_gto.yaml"
+}

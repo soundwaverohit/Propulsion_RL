@@ -1,0 +1,46 @@
+sweep: pilot_gto
+cells: 72  (24 configurations x 3 seeds)
+training budget: 960,000 env steps
+evaluation episodes: 264
+  missions     (1): gto_geo_transfer
+  propulsion   (4): hall_hermes, hall_spt100, ion_next, ion_nstar
+  agents       (6): edelbaum, max_thrust, ppo, prograde, random, sac
+  cost_models  (1): reference
+  seeds        (3): 0, 1, 2
+excluded pairings (6):
+  - edelbaum@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.
+  - max_thrust@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.
+  - prograde@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.
+  - random@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.
+  - ppo@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.
+  - sac@nep_kilopower on gto_geo_transfer  [mass_budget_does_not_close]
+      The propulsion system's own dry mass, charged against the mission's fixed
+      launched wet mass, leaves no useful propellant. The vehicle cannot be
+      built, so no controller can fly it; excluding the cell is the honest
+      alternative to reporting a failure that is structural rather than
+      behavioural. Arithmetic exclusion from each system's bill of materials.

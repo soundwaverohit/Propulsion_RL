@@ -1,0 +1,35 @@
+{
+  "sweep": "pilot_economics",
+  "protocol_version": 3,
+  "finished": 1788370968.7749188,
+  "wall_s": 1772.557295125007,
+  "n_cells": 90,
+  "n_rows": 90,
+  "n_cached": 0,
+  "n_failed": 0,
+  "workers": 4,
+  "report_policy": "best",
+  "selection_metric": "return",
+  "seed_bands": {
+    "train": [
+      0,
+      400000000
+    ],
+    "val": [
+      700000000,
+      800000000
+    ],
+    "test": [
+      900000000,
+      1000000000
+    ]
+  },
+  "platform": {
+    "python": "3.11.8",
+    "system": "Darwin",
+    "machine": "arm64",
+    "numpy": "2.4.6",
+    "torch": "2.14.0"
+  },
+  "excluded_pairings": []
+}

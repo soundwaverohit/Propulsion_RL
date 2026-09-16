@@ -1,0 +1,9 @@
+sweep: smoke
+cells: 18  (6 configurations x 3 seeds)
+training budget: 2,400 env steps
+evaluation episodes: 162
+  missions     (1): leo_geo_transfer
+  propulsion   (2): hall_spt100, nep_kilopower
+  agents       (3): max_thrust, ppo, random
+  cost_models  (1): reference
+  seeds        (3): 0, 1, 2

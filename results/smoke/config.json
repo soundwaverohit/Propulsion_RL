@@ -1,0 +1,38 @@
+{
+  "name": "smoke",
+  "description": "Tiny end-to-end sweep. Two propulsion systems from opposite families, one mission, three controllers spanning scripted and learned. Exists to prove the pipeline runs, not to measure anything.\n",
+  "propulsion": [
+    "hall_spt100",
+    "nep_kilopower"
+  ],
+  "missions": [
+    "leo_geo_transfer"
+  ],
+  "agents": [
+    "random",
+    "max_thrust",
+    "ppo"
+  ],
+  "cost_models": [
+    "reference"
+  ],
+  "seeds": 3,
+  "train_steps": 400,
+  "eval_episodes": 4,
+  "val_episodes": 3,
+  "eval_interval": 200,
+  "per_agent": {},
+  "agent_kwargs": {},
+  "env": {
+    "max_episode_steps": 60
+  },
+  "exclude": [],
+  "include_only": [],
+  "allow_implausible": false,
+  "report_policy": "best",
+  "selection_metric": "return",
+  "results_dir": "results",
+  "workers": 1,
+  "save_telemetry": true,
+  "source": "/Users/rohitganti/Desktop/Propulsion_RL/configs/smoke.yaml"
+}

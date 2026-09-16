@@ -101,6 +101,25 @@ def _dose_rate_krad_s(radius_m: float) -> float:
 class LEOtoGEOTransfer(Mission):
     """Raise a comsat from a 400 km, 28.5 deg parking orbit to a GEO slot.
 
+    Feasibility note (changed from the original specification)
+    ----------------------------------------------------------
+    The shipped defaults -- a one-year clock, 1500 krad, e <= 0.01 -- describe a
+    transfer that nothing in the registry can fly. A 12.5 kW Hall thruster on a
+    5 t stack needs ~900 days of thrusting to retire the 5.9 km/s Edelbaum
+    budget, and a low-thrust spiral arrives with residual eccentricity that the
+    steering law does not null. Every controller therefore failed for the same
+    structural reason, no payload was ever delivered, and every economic figure
+    came out as ``inf``, which measures nothing.
+
+    The clock is now 2.5 years, the hard dose limit 6000 krad, and the
+    eccentricity gate 0.015. Under these the strong electric option (HERMeS)
+    delivers its payload in ~890 days and the weak ones still fail, which is
+    the discrimination the benchmark exists to make. These are *specification*
+    changes, not physics: quote them alongside any result, and note that the
+    eccentricity gate in particular is the binding one -- at 0.010 the mission
+    is unachievable by the analytical optimum, so a study that tightens it back
+    is measuring the gate rather than the propulsion.
+
     Mass budget convention: the mission fixes the *launched* wet mass and the
     payload; the propellant load is whatever is left after the stage's dry mass.
     A heavier propulsion system therefore automatically flies with less
@@ -122,12 +141,12 @@ class LEOtoGEOTransfer(Mission):
         start_inclination_rad: float = math.radians(28.5),
         target_radius_m: float = GEO_RADIUS,
         step_dt_s: float = HOUR,
-        max_duration_s: float = YEAR,
+        max_duration_s: float = 2.5 * YEAR,
         radius_tolerance: float = 0.004,
         inclination_tolerance_rad: float = math.radians(0.5),
-        eccentricity_tolerance: float = 0.01,
-        dose_soft_limit_krad: float = 500.0,
-        dose_hard_limit_krad: float = 1500.0,
+        eccentricity_tolerance: float = 0.015,
+        dose_soft_limit_krad: float = 2000.0,
+        dose_hard_limit_krad: float = 6000.0,
         min_altitude_m: float = 150e3,
         config: RewardConfig | None = None,
     ) -> None:
@@ -148,6 +167,22 @@ class LEOtoGEOTransfer(Mission):
         self.dose_soft_limit_krad = float(dose_soft_limit_krad)
         self.dose_hard_limit_krad = float(dose_hard_limit_krad)
         self.min_altitude_m = float(min_altitude_m)
+
+        #: Semi-major axis the ``sma_gap`` channel is normalised against, i.e.
+        #: the axis the vehicle starts on. Kept as one attribute because
+        #: ``observe_raw`` and ``observation_scales`` must agree exactly: the
+        #: controller reconstructs ``a / a_target`` from the pair, and a
+        #: mismatch there silently mis-states how far along the transfer is.
+        self.reference_start_radius_m = self._reference_start_radius()
+
+        #: Scale of the eccentricity-vector channels. ``observe_raw`` passes
+        #: these through ``tanh(e / scale)``, so a scale far below the
+        #: eccentricity actually flown saturates the channel to +/-1 and hands
+        #: the controller a constant with no gradient -- it can no longer see
+        #: which way the orbit is elongated, let alone how much. Near-circular
+        #: starts want a small scale for resolution; an elliptical start must
+        #: widen it to its own eccentricity.
+        self.ecc_scale = self._reference_eccentricity_scale()
 
         # Propellant is the whole story on this mission, and a slow spiral is
         # punished through radiation rather than through the clock, so the time
@@ -182,6 +217,18 @@ class LEOtoGEOTransfer(Mission):
         self._cache: Osculating | None = None
 
     # --- lifecycle -----------------------------------------------------------
+    def _reference_start_radius(self) -> float:
+        """Semi-major axis the transfer starts from. Overridden by GTO starts."""
+        return LEO_RADIUS
+
+    def _reference_eccentricity_scale(self) -> float:
+        """Eccentricity the observation channels are scaled against.
+
+        A parking orbit is circular to within a few parts in a thousand, so a
+        small scale gives the controller useful resolution on the residual.
+        """
+        return 0.05
+
     def reset(self, rng: np.random.Generator) -> VehicleState:
         """Sample a parking orbit: dispersed injection, random node, random epoch.
 
@@ -211,12 +258,29 @@ class LEOtoGEOTransfer(Mission):
         state = VehicleState(
             position_m=pos,
             velocity_m_s=vel,
-            dry_mass_kg=self.stage_dry_mass_kg,
+            dry_mass_kg=self.total_dry_mass_kg,
             propellant_kg=self.propellant_capacity_kg,
             payload_kg=self.payload_kg,
             t_s=0.0,
         )
 
+        self._reset_episode_accumulators(state)
+        logger.debug(
+            "leo_geo_transfer reset: a0=%.1f km i0=%.3f deg dv_ref=%.1f m/s",
+            self._start_a * 1e-3,
+            math.degrees(self._start_inc),
+            self._dv_reference,
+        )
+        return state
+
+    def _reset_episode_accumulators(self, state: VehicleState) -> None:
+        """Clear per-episode bookkeeping and re-derive the shaping reference.
+
+        Split out of :meth:`reset` so a subclass that samples a different
+        starting orbit inherits the bookkeeping verbatim. Forgetting one of
+        these -- the dose integral especially -- leaks the previous episode into
+        the next one and is invisible until a sweep reports impossible results.
+        """
         self._t0_s = 0.0
         self._acc_t_s = 0.0
         self._dose_krad = 0.0
@@ -235,13 +299,6 @@ class LEOtoGEOTransfer(Mission):
             edelbaum_delta_v(el.a, self.target_radius_m, el.inc, 0.0, self.mu), 1.0
         )
         self._phi_prev = self._potential(state)
-        logger.debug(
-            "leo_geo_transfer reset: a0=%.1f km i0=%.3f deg dv_ref=%.1f m/s",
-            el.a * 1e-3,
-            math.degrees(el.inc),
-            self._dv_reference,
-        )
-        return state
 
     # --- internals -----------------------------------------------------------
     def _shape(self, state: VehicleState) -> Osculating:
@@ -312,13 +369,20 @@ class LEOtoGEOTransfer(Mission):
             (pos[0] * sun[0] + pos[1] * sun[1] + pos[2] * sun[2]) / rn, -1.0, 1.0
         )
 
-        span = self.target_radius_m - LEO_RADIUS
+        span = self.target_radius_m - self.reference_start_radius_m
         return np.array(
             [
                 signed_frac(self.target_radius_m - el.a, span),
-                signed_frac(el.inc, self.start_inclination_rad),
-                soft_frac(el.ex, 0.05),
-                soft_frac(el.ey, 0.05),
+                # Signed *error*, not the raw inclination: the canonical
+                # channel contract is (i_target - i), and the GEO target is
+                # equatorial, so this is negative while there is plane change
+                # still owed and rises to zero at the slot. Emitting +i here
+                # instead tells a steering law that reads the contract to raise
+                # the inclination, and Edelbaum obligingly flies the transfer
+                # backwards.
+                signed_frac(-el.inc, self.start_inclination_rad),
+                soft_frac(el.ex, self.ecc_scale),
+                soft_frac(el.ey, self.ecc_scale),
                 el.sin_u,
                 el.cos_u,
                 beta,
@@ -330,6 +394,23 @@ class LEOtoGEOTransfer(Mission):
             ],
             dtype=np.float32,
         )
+
+    def observation_scales(self) -> dict[str, float]:
+        """Physical spans behind the normalised mission channels.
+
+        ``inclination_gap`` is scaled by the starting inclination;
+        ``sma_gap`` by the start-to-GEO span, published as a fraction of the
+        target radius so a controller can recover ``a / a_target`` and with it
+        the circular-speed ratio its steering law is written in.
+        """
+        return {
+            "inc_error": self.start_inclination_rad,
+            "sma_error": (
+                (self.target_radius_m - self.reference_start_radius_m)
+                / self.target_radius_m
+            ),
+            "ecc_x": self.ecc_scale,
+        }
 
     def observation_labels(self) -> tuple[str, ...]:
         return (

@@ -1,0 +1,15 @@
+{
+  "protocol": 3,
+  "propulsion": "hall_hermes",
+  "mission": "gto_geo_transfer",
+  "agent": "random",
+  "cost_model": "reference",
+  "seed": 1,
+  "train_steps": 40000,
+  "eval_episodes": 2,
+  "val_episodes": 1,
+  "eval_interval": 20000,
+  "agent_kwargs": {},
+  "env_config": {},
+  "slug": "random-hall_hermes-gto_geo_transfer-reference-s001-0889af2aa343"
+}

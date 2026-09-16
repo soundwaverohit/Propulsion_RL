@@ -1,0 +1,17 @@
+{
+  "protocol": 3,
+  "propulsion": "nep_kilopower",
+  "mission": "leo_geo_transfer",
+  "agent": "ppo",
+  "cost_model": "reference",
+  "seed": 0,
+  "train_steps": 400,
+  "eval_episodes": 4,
+  "val_episodes": 3,
+  "eval_interval": 200,
+  "agent_kwargs": {},
+  "env_config": {
+    "max_episode_steps": 60
+  },
+  "slug": "ppo-nep_kilopower-leo_geo_transfer-reference-s000-9b0815f4d265"
+}

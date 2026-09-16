@@ -1,0 +1,75 @@
+# pilot_economics.yaml -- which propulsion is cheapest per kg, under AI control.
+#
+# A short, honest pilot for the thesis question. It exists to produce a real
+# ranked $/kg table end to end, and to size the full run, not to settle
+# anything: the budgets are small and three seeds is below what the analysis
+# needs to call a winner. The analysis says so in its own caveat line; leave
+# that line in when quoting these numbers.
+#
+#   propulsion-rl run --config configs/pilot_economics.yaml --workers 4
+#   propulsion-rl analyze --sweep pilot_economics
+#
+# Why this mission only
+# ---------------------
+# leo_geo_transfer is the one mission in the registry that any controller can
+# currently complete, so it is the only one that yields a finite $/kg rather
+# than the infinity a failed delivery scores. The two interplanetary missions
+# need a heliocentric guidance law the package does not have -- the strongest
+# baseline there is "point prograde", which does not rendezvous -- and GEO
+# station keeping has no longitude-error channel for a scripted controller to
+# servo on. Both are open work, not settings.
+
+name: pilot_economics
+description: >
+  Cost per kilogram delivered to GEO, by propulsion system, across scripted and
+  learned controllers. Three seeds and a small training budget: a pilot for the
+  full sweep, not a result to publish.
+
+# --- the axes ----------------------------------------------------------------
+# Every propulsion system whose mass budget closes on a 5 t stack. The heavy
+# fission options are excluded arithmetically by the matrix (an 18 t Brayton
+# module does not fit inside a 5 t comsat), so listing them here would only
+# produce exclusion rows.
+propulsion:
+  - hall_hermes
+  - hall_spt100
+  - ion_next
+  - ion_nstar
+  - nep_kilopower
+
+missions:
+  - leo_geo_transfer
+
+# Edelbaum is the analytical optimum for this transfer and the line the learned
+# methods have to beat; max_thrust and prograde are the naive references;
+# random is the floor. ppo and sac are the learners.
+agents:
+  - edelbaum
+  - max_thrust
+  - prograde
+  - random
+  - ppo
+  - sac
+
+# One price book for the pilot. The full run brackets with conservative.
+cost_models:
+  - reference
+
+# --- protocol ----------------------------------------------------------------
+seeds: 3
+
+# NOTE: an episode here is ~21k environment steps, so this budget is a handful
+# of episodes and the learned agents are badly under-trained by construction.
+# They are included to prove the path runs end to end and to measure their
+# cost, not to be judged on it.
+train_steps: 40000
+eval_interval: 20000
+val_episodes: 1
+eval_episodes: 2
+
+report_policy: best
+selection_metric: return
+
+results_dir: results
+workers: 4
+save_telemetry: false

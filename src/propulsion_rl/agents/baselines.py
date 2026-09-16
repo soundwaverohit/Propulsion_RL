@@ -70,6 +70,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "BangBangAgent",
     "EdelbaumAgent",
+    "GTOTransferAgent",
     "LifeAwareAgent",
     "MaxIspAgent",
     "MaxThrustAgent",
@@ -91,6 +92,8 @@ IX_PROGRESS = 0            # [0, 1] fraction of the goal achieved
 IX_TIME_FRAC = 1           # [0, 1] fraction of the mission clock spent
 IX_RADIUS_ERROR = 2        # (r - r_target) / scale; > 0 means "too high"
 IX_SMA_ERROR = 3           # (a - a_target) / scale
+IX_ECC_X = 2               # eccentricity vector, node-frame x
+IX_ECC_Y = 3               # eccentricity vector, node-frame y
 IX_ECCENTRICITY = 4        # current eccentricity
 IX_INC_ERROR = 5           # (i_target - i) normalised; > 0 means "raise i"
 IX_INC_CURRENT = 6
@@ -99,6 +102,7 @@ IX_SPEED_RATIO = 8         # v / v_target - 1
 IX_RADIAL_VELOCITY = 9
 IX_TRANSVERSE_VELOCITY = 10
 IX_PHASE = 11              # cos(argument of latitude); sets the node sign
+IX_PHASE_SIN = 10          # sin(argument of latitude); with IX_PHASE gives u
 
 # --- Vehicle block, indices 12..19 -------------------------------------------
 IX_MASS_FRACTION = 12
@@ -131,6 +135,8 @@ DEFAULT_CHANNELS: dict[str, int] = {
     "time_frac": IX_TIME_FRAC,
     "radius_error": IX_RADIUS_ERROR,
     "sma_error": IX_SMA_ERROR,
+    "ecc_x": IX_ECC_X,
+    "ecc_y": IX_ECC_Y,
     "eccentricity": IX_ECCENTRICITY,
     "inc_error": IX_INC_ERROR,
     "inc_current": IX_INC_CURRENT,
@@ -139,6 +145,7 @@ DEFAULT_CHANNELS: dict[str, int] = {
     "radial_velocity": IX_RADIAL_VELOCITY,
     "transverse_velocity": IX_TRANSVERSE_VELOCITY,
     "phase": IX_PHASE,
+    "phase_sin": IX_PHASE_SIN,
     "mass_fraction": IX_MASS_FRACTION,
     "propellant_fraction": IX_PROPELLANT_FRACTION,
     "power_available": IX_POWER_AVAILABLE,
@@ -167,10 +174,11 @@ DEFAULT_CHANNELS: dict[str, int] = {
 #: block just because it sorted first.
 _CHANNEL_BLOCK: dict[str, slice] = {
     **{k: MISSION_BLOCK for k in ("progress", "time_frac", "radius_error",
-                                  "sma_error", "eccentricity", "inc_error",
+                                  "sma_error", "eccentricity", "ecc_x", "ecc_y",
+                                  "inc_error",
                                   "inc_current", "inc_target", "speed_ratio",
                                   "radial_velocity", "transverse_velocity",
-                                  "phase")},
+                                  "phase", "phase_sin")},
     **{k: VEHICLE_BLOCK for k in ("mass_fraction", "propellant_fraction",
                                   "power_available", "power_margin", "delta_v",
                                   "eclipse", "sun_distance")},
@@ -187,19 +195,35 @@ _CHANNEL_BLOCK: dict[str, slice] = {
 _CHANNEL_PATTERNS: dict[str, tuple[str, ...]] = {
     "progress": ("progress", "completion", "frac_done"),
     "time_frac": ("time_frac", "t_frac", "elapsed", "time_left", "time_remain"),
-    "inc_error": ("inc_err", "incl_err", "inclination_err", "delta_i", "di_",
+    "inc_error": ("inc_err", "incl_err", "inclination_err", "inc_gap",
+                  "incl_gap", "inclination_gap", "delta_i", "di_",
                   "plane_err", "d_inc"),
     "inc_target": ("inc_target", "target_inc", "i_target"),
     "inc_current": ("inc", "incl"),
-    "sma_error": ("sma_err", "a_err", "semi_major", "sma", "energy_err"),
-    "radius_error": ("radius_err", "r_err", "alt_err", "radius_ratio",
-                     "range_err", "radius", "altitude"),
+    "sma_error": ("sma_err", "sma_gap", "a_err", "semi_major", "sma",
+                  "energy_err"),
+    "radius_error": ("radius_err", "radius_gap", "r_err", "alt_err",
+                     "radius_ratio", "range_err", "radius", "altitude"),
+    # Both components, before the scalar: a bare "ecc" substring would
+    # otherwise claim ``ecc_vector_x`` for the scalar eccentricity channel
+    # purely because it sorts first, and the vector carries the direction of
+    # perigee -- which is what tells a controller where in the orbit it is.
+    "ecc_x": ("ecc_vector_x", "ecc_x", "e_x", "ecc_cos"),
+    "ecc_y": ("ecc_vector_y", "ecc_y", "e_y", "ecc_sin"),
     "eccentricity": ("ecc",),
     "speed_ratio": ("speed_ratio", "v_ratio", "speed_err", "vel_err", "speed"),
     "radial_velocity": ("v_radial", "radial_vel", "v_r", "vr"),
     "transverse_velocity": ("v_transverse", "transverse", "v_t", "vt"),
-    "phase": ("cos_u", "u_cos", "arg_lat", "phase", "true_anom", "longitude",
-              "lon_err"),
+    "phase_sin": ("sin_arg_lat", "sin_u", "u_sin", "sin_phase", "sin_true_anom"),
+    # Cosine first, and explicitly. This channel sets the sign of Edelbaum's
+    # out-of-plane thrust at the nodes, so it must be cos(argument of latitude);
+    # binding it to the sine instead puts the sign flip a quarter-revolution out
+    # of place and the plane change cancels itself over each orbit rather than
+    # accumulating. Every mission here emits *both* components, and a bare
+    # "arg_lat" or "phase" substring matches the sine first purely because it is
+    # the lower index.
+    "phase": ("cos_arg_lat", "cos_u", "u_cos", "cos_phase", "cos_true_anom",
+              "arg_lat", "phase", "true_anom", "longitude", "lon_err"),
     "mass_fraction": ("mass_frac", "mass"),
     "propellant_fraction": ("prop_frac", "propellant", "fuel"),
     "power_margin": ("power_margin", "power_frac"),
@@ -436,6 +460,63 @@ class _BaselineAgent(ScriptedAgent):
         self.reader = ObsReader(self.layout)
         self._warned: set[str] = set()
 
+    def bind_observation_labels(self, labels: Sequence[str] | None) -> None:
+        """Re-resolve every channel against *labels*, after construction.
+
+        The sweep runner builds the agent before the environment -- the agent's
+        seeding has to happen at a fixed point in the RNG stream, and the
+        environment is not cheap -- so the labels are not available at
+        ``__init__``. Without this hook the runner's only options are to accept
+        the default index layout, which is *not* the layout this package's
+        environment actually emits, or to reorder construction and change every
+        cell's random stream.
+
+        Re-binding is safe at any point before the first ``act``; the reader
+        keeps no per-channel history that outlives a ``reset``.
+        """
+        if labels is None:
+            return
+        self.layout = ObsLayout(tuple(labels))
+        self.reader = ObsReader(self.layout)
+        self._warned.clear()
+
+    #: Canonical channel name -> the attribute holding this controller's
+    #: assumed physical scale for it. Only channels a controller actually
+    #: de-normalises need an entry.
+    scale_attrs: dict[str, str] = {
+        "inc_error": "inc_scale_rad",
+        "sma_error": "sma_scale",
+        "ecc_x": "ecc_scale",
+    }
+
+    #: Scale the mission applied to the eccentricity-vector channels, when it
+    #: publishes one. ``None`` means the channels cannot be de-normalised and a
+    #: controller that needs true eccentricity must decline to use them.
+    ecc_scale: float | None = None
+
+    #: Span of the ``sma_error`` channel as a fraction of the target semi-major
+    #: axis, when the mission publishes it. ``None`` means "not published";
+    #: the speed-ratio chain then falls through to its next tier.
+    sma_scale: float | None = None
+
+    def bind_observation_scales(self, scales: Any) -> None:
+        """Adopt the mission's own normalisation for the channels it publishes.
+
+        Complements :meth:`bind_observation_labels`: labels say *where* a
+        channel is, scales say what its units were before normalisation. A
+        controller keeps its documented default for anything unpublished.
+        """
+        if not scales:
+            return
+        for channel, attr in self.scale_attrs.items():
+            value = scales.get(channel)
+            if value is None or not hasattr(self, attr):
+                continue
+            try:
+                setattr(self, attr, float(value))
+            except (TypeError, ValueError):
+                continue
+
     def _warn_once(self, key: str, msg: str, *args: Any) -> None:
         if key not in self._warned:
             self._warned.add(key)
@@ -479,6 +560,14 @@ class _BaselineAgent(ScriptedAgent):
         if self.reader.live("radius_error"):
             r_ratio = max(1e-3, 1.0 + self.reader.get("radius_error"))
             return math.sqrt(1.0 / r_ratio)
+        if self.sma_scale is not None and self.reader.live("sma_error"):
+            # The channel is (a_target - a) normalised by some span the mission
+            # owns; sma_scale is that span as a fraction of a_target, which is
+            # what turns it back into the ratio the steering law needs.
+            # Without this the law never learns it has arrived, and keeps
+            # thrusting prograde straight through the target orbit.
+            a_ratio = 1.0 - self.reader.get("sma_error") * self.sma_scale
+            return math.sqrt(1.0 / max(a_ratio, 1e-3))
         if self.reader.live("progress"):
             p = float(np.clip(self.reader.get("progress"), 0.0, 1.0))
             return max(1e-3, initial + (1.0 - initial) * p)
@@ -736,6 +825,137 @@ class EdelbaumAgent(_BaselineAgent):
         throttle = self.throttle
         if self.reader.live("progress") and self.reader.get("progress") >= self.stop_progress:
             throttle = 0.0
+        margin = self._thermal_backoff(self.thermal_margin, self.guard_threshold)
+        return _action(throttle, self.operating_point, yaw, pitch, margin)
+
+
+@AGENT.register("gto_transfer", kind="scripted", learns=False)
+class GTOTransferAgent(EdelbaumAgent):
+    """Apogee-biased circularisation for an elliptical drop-off. The GTO reference.
+
+    Edelbaum's law is the optimum of the *circle-to-circle* problem and carries
+    no eccentricity control at all. Handed a geostationary transfer orbit at
+    e = 0.73 it does the plane change beautifully -- inclination to hundredths of
+    a degree -- and leaves the orbit as elliptical as it found it, which fails
+    the insertion condition on eccentricity alone. It is the wrong law for this
+    transfer, and a wrong reference makes every learned controller look better
+    than it is.
+
+    What actually circularises a transfer orbit is thrusting near *apogee*,
+    where prograde thrust raises perigee, and where the vehicle is moving
+    slowest so a plane change costs least. This controller therefore gates
+    Edelbaum's steering on orbital position: burn through a window centred on
+    apogee, coast through perigee, and widen the window toward continuous thrust
+    as the orbit rounds out and Edelbaum's own assumptions start to hold.
+
+    Position in the orbit is recovered from the eccentricity vector and the
+    argument of latitude. Writing ``ex = e cos w`` and ``ey = e sin w`` for the
+    eccentricity vector in the node frame, and ``u`` for the argument of
+    latitude, the true anomaly follows from::
+
+        cos(nu) = cos(u - w) = (cos u * ex + sin u * ey) / e
+
+    which is +1 at perigee and -1 at apogee. Both terms are ordinary observation
+    channels, so this needs no privileged access to the simulator state.
+
+    Parameters
+    ----------
+    min_duty:
+        Narrowest burn window, as a fraction of the orbit in ``cos(nu)``, used at
+        the starting eccentricity. Too narrow starves the transfer of thrust
+        time; too wide spends propellant at perigee, where prograde thrust
+        raises apogee and makes the orbit *more* elliptical. The default was
+        chosen by sweeping 0.01 to 0.85 on HERMeS; the optimum is shallow, and
+        every value in 0.03-0.25 lands within a few percent of it.
+
+        Note the window is measured in ``cos(nu)``, not in time: near apogee the
+        true anomaly advances slowly, so a window that looks narrow here still
+        covers a substantial fraction of the orbital period.
+    round_at:
+        Eccentricity below which the window is fully open and the controller has
+        degraded to plain Edelbaum steering.
+    """
+
+    name = "gto_transfer"
+
+    def __init__(
+        self,
+        obs_dim: int,
+        action_dim: int,
+        *,
+        min_duty: float = 0.10,
+        round_at: float = 0.02,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(obs_dim, action_dim, **kwargs)
+        self.min_duty = float(min_duty)
+        self.round_at = float(round_at)
+
+    def _ecc_vector(self) -> tuple[float, float] | None:
+        """De-normalised ``(ex, ey)``, or None when the channels are unusable.
+
+        The mission passes these through ``tanh(x / scale)``, so recovering them
+        needs the scale it used; without it the components are not on any known
+        axis and guessing one would be worse than declining.
+        """
+        if self.ecc_scale is None:
+            return None
+        if not (self.reader.live("ecc_x") or self.reader.live("ecc_y")):
+            return None
+        out = []
+        for channel in ("ecc_x", "ecc_y"):
+            v = float(np.clip(self.reader.get(channel), -0.999999, 0.999999))
+            out.append(math.atanh(v) * self.ecc_scale)
+        return out[0], out[1]
+
+    def _cos_true_anomaly(self, ex: float, ey: float, ecc: float) -> float:
+        """+1 at perigee, -1 at apogee. Needs both argument-of-latitude terms.
+
+        Both the sine and the cosine of ``u`` are required. Reconstructing the
+        sine as the positive root of the cosine loses its sign, which places the
+        vehicle on the wrong side of the orbit for half of every revolution --
+        the burn window then straddles perigee as often as apogee, and the
+        eccentricity barely moves.
+        """
+        if not (self.reader.live("phase") and self.reader.live("phase_sin")):
+            return -1.0            # position unknown: behave as plain Edelbaum
+        cos_u = self.reader.get("phase")
+        sin_u = self.reader.get("phase_sin")
+        return float(np.clip((cos_u * ex + sin_u * ey) / max(ecc, 1e-9), -1.0, 1.0))
+
+    def _duty_cut(self, ecc: float) -> float:
+        """Threshold on cos(nu): burn while ``cos(nu) <= cut``.
+
+        The window opens linearly from ``min_duty`` of the orbit at the starting
+        eccentricity to the whole orbit once the orbit is round.
+        """
+        e0 = self.ecc_scale if self.ecc_scale else 1.0
+        roundness = float(
+            np.clip((ecc - self.round_at) / max(e0 - self.round_at, 1e-9), 0.0, 1.0)
+        )
+        # Concave in roundness on purpose. A linear ramp has the window more
+        # than half open by the time eccentricity is down to 0.3, which puts
+        # thrust back through perigee -- where prograde thrust raises apogee and
+        # undoes the circularisation. The transfer then stalls at a stable
+        # eccentricity while still burning propellant. Keep the window near its
+        # floor until the orbit is genuinely round.
+        duty = 1.0 - (1.0 - self.min_duty) * (roundness ** 0.25)
+        return -1.0 + 2.0 * duty
+
+    def _control(self, deterministic: bool) -> np.ndarray:
+        yaw, pitch = self.steering()
+        throttle = self.throttle
+        if self.reader.live("progress") and self.reader.get("progress") >= self.stop_progress:
+            throttle = 0.0
+        else:
+            vec = self._ecc_vector()
+            if vec is not None:
+                ex, ey = vec
+                ecc = math.hypot(ex, ey)
+                if ecc > self.round_at:
+                    cos_nu = self._cos_true_anomaly(ex, ey, ecc)
+                    if cos_nu > self._duty_cut(ecc):
+                        throttle = 0.0          # coast: this arc is near perigee
         margin = self._thermal_backoff(self.thermal_margin, self.guard_threshold)
         return _action(throttle, self.operating_point, yaw, pitch, margin)
 

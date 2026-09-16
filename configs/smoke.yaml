@@ -23,9 +23,14 @@ description: >
 # --- the axes ----------------------------------------------------------------
 # One electric and one nuclear system, so the interaction analysis has two
 # levels on the propulsion factor and can actually run.
+#
+# The nuclear side is Kilopower rather than a Pewee-class NTP stage because this
+# mission fixes a 5 t launched wet mass: a 6.5 t engine does not fit inside it,
+# and the matrix's mass-budget rule excludes the pairing outright. Kilopower is
+# the fission option that closes the budget here, at 200 kg of propellant.
 propulsion:
   - hall_spt100
-  - ntp_pewee
+  - nep_kilopower
 
 missions:
   - leo_geo_transfer

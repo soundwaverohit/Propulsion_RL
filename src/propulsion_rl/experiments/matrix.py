@@ -29,6 +29,7 @@ with -- the judgement calls. ``allow_implausible: true`` disables them all.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -239,6 +240,9 @@ class Exclusion:
 #: registry naming scheme. Checked against registry metadata first.
 _NUCLEAR_PREFIXES = ("ntp_", "nep_")
 _LOW_POWER_EP = ("hall_spt100", "ion_nstar")
+#: Fallback only. The frame is registry metadata that each mission owns, so
+#: :func:`is_planetocentric` reads that first; this list catches a mission that
+#: neglects to declare one.
 _PLANETOCENTRIC_MISSIONS = ("leo_geo_transfer", "geo_station_keeping")
 
 
@@ -260,6 +264,20 @@ def propulsion_family(name: str) -> str:
     return "unknown"
 
 
+def is_planetocentric(mission: str) -> bool:
+    """Whether *mission* is flown about a planet rather than about the Sun.
+
+    Reads the ``frame`` the mission registered, falling back to the name list
+    only when a mission declares none. A hand-maintained list silently
+    mis-classifies every mission added after it was written -- which for the
+    Edelbaum rule below means excluding the one baseline that transfer has.
+    """
+    frame = MISSION.meta(mission).get("frame")
+    if frame is not None:
+        return str(frame).lower() == "planetocentric"
+    return mission in _PLANETOCENTRIC_MISSIONS
+
+
 def _is_nuclear(propulsion: str) -> bool:
     return propulsion_family(propulsion) == "nuclear"
 
@@ -277,6 +295,31 @@ def _power_floor_rule(propulsion: str, mission: str, agent: str) -> bool:
     if have[0] is None or have[1] is None:
         return False
     return float(have[0]) < float(have[1])
+
+
+@functools.lru_cache(maxsize=None)
+def _mass_floor_rule(propulsion: str, mission: str, agent: str = "") -> bool:
+    """Exclude a stage whose engine will not fit inside its own wet mass.
+
+    Every mission fixes the launched wet mass and lets propellant be the
+    remainder, so charging the propulsion system's dry mass to that budget can
+    leave nothing to burn: an 18 t Brayton NEP module does not go into a 5 t
+    comsat, and an NTP stage whose engine alone outweighs the vehicle is not a
+    hard control problem but a mis-specified one.
+
+    Asks the objects rather than a name list, so a newly registered thruster is
+    covered the moment it publishes a bill of materials. Cached because the
+    matrix evaluates every rule across the full cross product, and construction
+    is the expensive part. A pairing that cannot be built at all is left to the
+    conformance suite to fail loudly; it is not excluded quietly here.
+    """
+    try:
+        system = PROPULSION.make(propulsion)
+        task = MISSION.make(mission)
+        task.account_for_propulsion(float(system.bom().dry_mass_kg))
+        return not task.mass_budget_closes()
+    except Exception:  # noqa: BLE001 - a build failure is not an exclusion
+        return False
 
 
 PLAUSIBILITY_RULES: tuple[PlausibilityRule, ...] = (
@@ -321,7 +364,7 @@ PLAUSIBILITY_RULES: tuple[PlausibilityRule, ...] = (
             "heliocentric transfer it is not a weak baseline, it is the wrong equation, "
             "and a broken baseline inflates every RL win measured against it."
         ),
-        predicate=lambda p, m, a: a == "edelbaum" and m not in _PLANETOCENTRIC_MISSIONS,
+        predicate=lambda p, m, a: a == "edelbaum" and not is_planetocentric(m),
     ),
     PlausibilityRule(
         name="power_floor_from_metadata",
@@ -331,6 +374,17 @@ PLAUSIBILITY_RULES: tuple[PlausibilityRule, ...] = (
             "whenever either side does not publish the figure."
         ),
         predicate=_power_floor_rule,
+    ),
+    PlausibilityRule(
+        name="mass_budget_does_not_close",
+        reason=(
+            "The propulsion system's own dry mass, charged against the mission's fixed "
+            "launched wet mass, leaves no useful propellant. The vehicle cannot be "
+            "built, so no controller can fly it; excluding the cell is the honest "
+            "alternative to reporting a failure that is structural rather than "
+            "behavioural. Arithmetic exclusion from each system's bill of materials."
+        ),
+        predicate=_mass_floor_rule,
     ),
 )
 

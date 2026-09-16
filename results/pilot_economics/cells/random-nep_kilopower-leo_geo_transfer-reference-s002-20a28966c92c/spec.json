@@ -1,0 +1,15 @@
+{
+  "protocol": 3,
+  "propulsion": "nep_kilopower",
+  "mission": "leo_geo_transfer",
+  "agent": "random",
+  "cost_model": "reference",
+  "seed": 2,
+  "train_steps": 40000,
+  "eval_episodes": 2,
+  "val_episodes": 1,
+  "eval_interval": 20000,
+  "agent_kwargs": {},
+  "env_config": {},
+  "slug": "random-nep_kilopower-leo_geo_transfer-reference-s002-20a28966c92c"
+}
