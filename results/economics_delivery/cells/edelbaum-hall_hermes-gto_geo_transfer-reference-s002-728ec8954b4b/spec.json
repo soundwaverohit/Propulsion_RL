@@ -1,0 +1,17 @@
+{
+  "protocol": 3,
+  "propulsion": "hall_hermes",
+  "mission": "gto_geo_transfer",
+  "agent": "edelbaum",
+  "cost_model": "reference",
+  "seed": 2,
+  "train_steps": 60000,
+  "eval_episodes": 4,
+  "val_episodes": 2,
+  "eval_interval": 20000,
+  "agent_kwargs": {},
+  "env_config": {
+    "max_episode_steps": 8000
+  },
+  "slug": "edelbaum-hall_hermes-gto_geo_transfer-reference-s002-728ec8954b4b"
+}

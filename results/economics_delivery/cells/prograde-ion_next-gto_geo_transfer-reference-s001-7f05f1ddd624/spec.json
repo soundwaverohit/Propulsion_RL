@@ -1,0 +1,17 @@
+{
+  "protocol": 3,
+  "propulsion": "ion_next",
+  "mission": "gto_geo_transfer",
+  "agent": "prograde",
+  "cost_model": "reference",
+  "seed": 1,
+  "train_steps": 60000,
+  "eval_episodes": 4,
+  "val_episodes": 2,
+  "eval_interval": 20000,
+  "agent_kwargs": {},
+  "env_config": {
+    "max_episode_steps": 8000
+  },
+  "slug": "prograde-ion_next-gto_geo_transfer-reference-s001-7f05f1ddd624"
+}

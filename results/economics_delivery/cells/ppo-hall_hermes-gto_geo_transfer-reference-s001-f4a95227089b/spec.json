@@ -1,0 +1,21 @@
+{
+  "protocol": 3,
+  "propulsion": "hall_hermes",
+  "mission": "gto_geo_transfer",
+  "agent": "ppo",
+  "cost_model": "reference",
+  "seed": 1,
+  "train_steps": 60000,
+  "eval_episodes": 4,
+  "val_episodes": 2,
+  "eval_interval": 20000,
+  "agent_kwargs": {
+    "gamma": 0.995,
+    "lr": 0.0003,
+    "n_steps": 2048
+  },
+  "env_config": {
+    "max_episode_steps": 8000
+  },
+  "slug": "ppo-hall_hermes-gto_geo_transfer-reference-s001-f4a95227089b"
+}

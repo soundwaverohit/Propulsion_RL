@@ -64,7 +64,7 @@ val_episodes: 8
 eval_episodes: 20
 
 report_policy: best
-selection_metric: return
+selection_metric: delivery
 
 # --- per-agent adjustments ---------------------------------------------------
 # These override the *protocol* only where an agent's cost structure makes the

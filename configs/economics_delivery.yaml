@@ -1,0 +1,66 @@
+# economics_delivery.yaml -- which pairing actually delivers cheaply.
+#
+# The pilots showed that ranking on episode return crowns a coasting Soft
+# Actor-Critic and that two of five thrusters cannot finish this transfer at
+# any controller. This sweep asks the question the thesis wants, on the only
+# mission a learner can finish (GTO to GEO) and the only two electric stages
+# that have ever delivered payload in this repository.
+#
+#   propulsion-rl run --config configs/economics_delivery.yaml --workers 4
+#   propulsion-rl analyze --sweep economics_delivery --metric cost_per_kg_delivered
+#   propulsion-rl plot --sweep economics_delivery --metric cost_per_kg_delivered
+
+name: economics_delivery
+description: >
+  Dollars per kilogram delivered from a launcher geostationary-transfer-orbit
+  drop-off to a geostationary slot. Checkpoint selection is delivery (success,
+  then progress), not raw return. Soft Actor-Critic temperature is clamped.
+
+propulsion:
+  - hall_hermes
+  - ion_next
+
+missions:
+  - gto_geo_transfer
+
+agents:
+  - edelbaum
+  - max_thrust
+  - prograde
+  - ppo
+  - sac
+
+cost_models:
+  - reference
+
+seeds: 3
+
+# A GTO episode is a couple of thousand steps, so this is tens of trajectories
+# rather than the two-episode joke of the 40k-step pilots.
+train_steps: 60000
+eval_interval: 20000
+val_episodes: 2
+eval_episodes: 4
+
+report_policy: best
+selection_metric: delivery
+
+agent_kwargs:
+  ppo:
+    lr: 0.0003
+    n_steps: 2048
+    gamma: 0.995
+  sac:
+    lr: 0.0003
+    batch_size: 256
+    gamma: 0.995
+    alpha: 0.2
+    alpha_max: 1.0
+    alpha_min: 0.0001
+
+env:
+  max_episode_steps: 8000
+
+results_dir: results
+workers: 4
+save_telemetry: true

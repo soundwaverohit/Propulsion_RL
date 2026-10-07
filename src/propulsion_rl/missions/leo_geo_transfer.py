@@ -475,7 +475,11 @@ class LEOtoGEOTransfer(Mission):
             if state.t_s + self.step_dt_s < self.max_duration_s:
                 return 0.0
             reason = TerminationReason.TIMEOUT
-        return terminal_value(reason, self.config)
+        return terminal_value(
+            reason,
+            self.config,
+            leftover_progress=1.0 - self.progress(state),
+        )
 
     def terminated(
         self, state: VehicleState, health: HealthReport, constraints: ConstraintReport

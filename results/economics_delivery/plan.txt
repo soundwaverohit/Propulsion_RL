@@ -1,0 +1,9 @@
+sweep: economics_delivery
+cells: 30  (10 configurations x 3 seeds)
+training budget: 720,000 env steps
+evaluation episodes: 252
+  missions     (1): gto_geo_transfer
+  propulsion   (2): hall_hermes, ion_next
+  agents       (5): edelbaum, max_thrust, ppo, prograde, sac
+  cost_models  (1): reference
+  seeds        (3): 0, 1, 2

@@ -156,7 +156,7 @@ class RunnerConfig:
     force: bool = False
     save_telemetry: bool = True
     report_policy: str = "best"          # "best" | "final"
-    selection_metric: str = "return"     # what the best checkpoint is best at
+    selection_metric: str = "delivery"   # what the best checkpoint is best at
     normalize_obs: bool = True
     #: Reward normalisation is applied to the *training* environment only.
     #: Evaluation always sees raw rewards, so returns stay comparable.
@@ -319,12 +319,11 @@ def _selection_value(summary: EvalSummary, metric: str) -> float:
     """Scalar the checkpoint selector maximises, computed on validation only."""
     if summary.n == 0:
         return -math.inf
-    if metric == "success":
-        # Ties on success rate broken by return, so a 0%-success early policy
-        # still makes progress up the ladder.
-        return summary.success_rate * 1e6 + summary.mean_return
-    if metric == "progress":
-        return _mean([e.progress for e in summary.episodes])
+    if metric in ("success", "progress", "delivery"):
+        # Delivery first, then how much of the transfer was done, then return.
+        # Raw return alone ranked coasting above any honest attempt.
+        prog = _mean([e.progress for e in summary.episodes])
+        return summary.success_rate * 1e6 + prog * 1e3 + summary.mean_return
     if metric == "neg_cost_per_kg":
         vals = [e.cost_per_kg_delivered for e in summary.episodes if
                 _finite(e.cost_per_kg_delivered)]

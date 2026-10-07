@@ -30,6 +30,7 @@ Why the pieces are there
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -147,6 +148,8 @@ class SACAgent(Agent):
         critic_lr = float(kwargs.get("critic_lr", self.lr))
         alpha_lr = float(kwargs.get("alpha_lr", self.lr))
         alpha_init = float(kwargs.get("alpha", 0.2))
+        self._log_alpha_lo = math.log(max(float(kwargs.get("alpha_min", 1.0e-4)), 1.0e-8))
+        self._log_alpha_hi = math.log(max(float(kwargs.get("alpha_max", 2.0)), 1.0e-4))
 
         self.config.update(
             hidden=self.hidden,
@@ -357,6 +360,8 @@ class SACAgent(Agent):
                 self.alpha_optimizer.zero_grad(set_to_none=True)
                 alpha_loss.backward()
                 self.alpha_optimizer.step()
+                with torch.no_grad():
+                    self.log_alpha.clamp_(self._log_alpha_lo, self._log_alpha_hi)
                 alpha_loss_val = float(alpha_loss.item())
             else:
                 self._skipped += 1

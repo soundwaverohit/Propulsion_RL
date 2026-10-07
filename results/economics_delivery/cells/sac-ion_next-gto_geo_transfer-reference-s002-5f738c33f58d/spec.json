@@ -1,0 +1,24 @@
+{
+  "protocol": 3,
+  "propulsion": "ion_next",
+  "mission": "gto_geo_transfer",
+  "agent": "sac",
+  "cost_model": "reference",
+  "seed": 2,
+  "train_steps": 60000,
+  "eval_episodes": 4,
+  "val_episodes": 2,
+  "eval_interval": 20000,
+  "agent_kwargs": {
+    "alpha": 0.2,
+    "alpha_max": 1.0,
+    "alpha_min": 0.0001,
+    "batch_size": 256,
+    "gamma": 0.995,
+    "lr": 0.0003
+  },
+  "env_config": {
+    "max_episode_steps": 8000
+  },
+  "slug": "sac-ion_next-gto_geo_transfer-reference-s002-5f738c33f58d"
+}

@@ -273,7 +273,11 @@ class _HeliocentricTransfer(Mission):
             if state.t_s + self.step_dt_s < self.max_duration_s:
                 return 0.0
             reason = TerminationReason.TIMEOUT
-        return terminal_value(reason, self.config) + self._terminal_extra(reason)
+        return terminal_value(
+            reason,
+            self.config,
+            leftover_progress=1.0 - self.progress(state),
+        ) + self._terminal_extra(reason)
 
     def _terminal_extra(self, reason: TerminationReason) -> float:
         return 0.0

@@ -1,0 +1,54 @@
+{
+  "name": "economics_delivery",
+  "description": "Dollars per kilogram delivered from a launcher geostationary-transfer-orbit drop-off to a geostationary slot. Checkpoint selection is delivery (success, then progress), not raw return. Soft Actor-Critic temperature is clamped.\n",
+  "propulsion": [
+    "hall_hermes",
+    "ion_next"
+  ],
+  "missions": [
+    "gto_geo_transfer"
+  ],
+  "agents": [
+    "edelbaum",
+    "max_thrust",
+    "prograde",
+    "ppo",
+    "sac"
+  ],
+  "cost_models": [
+    "reference"
+  ],
+  "seeds": 3,
+  "train_steps": 60000,
+  "eval_episodes": 4,
+  "val_episodes": 2,
+  "eval_interval": 20000,
+  "per_agent": {},
+  "agent_kwargs": {
+    "ppo": {
+      "lr": 0.0003,
+      "n_steps": 2048,
+      "gamma": 0.995
+    },
+    "sac": {
+      "lr": 0.0003,
+      "batch_size": 256,
+      "gamma": 0.995,
+      "alpha": 0.2,
+      "alpha_max": 1.0,
+      "alpha_min": 0.0001
+    }
+  },
+  "env": {
+    "max_episode_steps": 8000
+  },
+  "exclude": [],
+  "include_only": [],
+  "allow_implausible": false,
+  "report_policy": "best",
+  "selection_metric": "delivery",
+  "results_dir": "results",
+  "workers": 4,
+  "save_telemetry": true,
+  "source": "configs/economics_delivery.yaml"
+}

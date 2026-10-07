@@ -156,6 +156,11 @@ class RewardConfig:
     #: Terminal multipliers, in units of ``return_scale``.
     success_bonus: float = 1.0
     failure_malus: float = 0.5
+    #: Extra terminal cost, in units of ``return_scale``, for the fraction of
+    #: the transfer still unfinished. Without this a short coast or an early
+    #: hardware death outscores a long honest attempt, which is how the pilots
+    #: crowned Soft Actor-Critic for doing nothing.
+    unfinished_malus: float = 1.0
     hardware_malus_gain: float = 1.2
     safety_malus_gain: float = 1.5
     divergence_malus_gain: float = 2.0
@@ -197,25 +202,37 @@ def potential_shaping(phi_prev: float, phi_next: float, gamma: float = 1.0) -> f
 
 
 def terminal_value(
-    reason: TerminationReason, cfg: RewardConfig, *, timeout_is_success: bool = False
+    reason: TerminationReason,
+    cfg: RewardConfig,
+    *,
+    timeout_is_success: bool = False,
+    leftover_progress: float = 0.0,
 ) -> float:
     """Terminal bonus/malus in units of ``return_scale``, before ``w_terminal``.
 
     Shared so that "failing" costs the same across missions and a cross-mission
     return table is not secretly comparing different failure prices.
+    ``leftover_progress`` is ``1 - Phi`` at termination: a coast that never
+    started the transfer pays the full unfinished malus, a near-miss pays little.
     """
+    leftover = clamp01(leftover_progress)
     if reason is TerminationReason.SUCCESS:
         return cfg.success_bonus
     if reason is TerminationReason.TIMEOUT:
-        return cfg.success_bonus if timeout_is_success else -cfg.failure_malus
+        if timeout_is_success:
+            return cfg.success_bonus
+        return -cfg.failure_malus - leftover * cfg.unfinished_malus
     if reason is TerminationReason.OUT_OF_PROPELLANT:
-        return -cfg.failure_malus
+        return -cfg.failure_malus - leftover * cfg.unfinished_malus
     if reason is TerminationReason.HARDWARE_FAILURE:
-        return -cfg.failure_malus * cfg.hardware_malus_gain
+        return -cfg.failure_malus * cfg.hardware_malus_gain - leftover * cfg.unfinished_malus
     if reason is TerminationReason.SAFETY_VIOLATION:
-        return -cfg.failure_malus * cfg.safety_malus_gain
+        return -cfg.failure_malus * cfg.safety_malus_gain - leftover * cfg.unfinished_malus
     if reason is TerminationReason.DIVERGED:
-        return -cfg.failure_malus * cfg.divergence_malus_gain
+        return (
+            -cfg.failure_malus * cfg.divergence_malus_gain
+            - leftover * cfg.unfinished_malus
+        )
     return 0.0
 
 

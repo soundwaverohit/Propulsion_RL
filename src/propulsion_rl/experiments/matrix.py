@@ -484,7 +484,7 @@ class SweepConfig:
     #: validation seeds) or "final".
     report_policy: str = "best"
     #: Metric used to pick the best checkpoint during training.
-    selection_metric: str = "return"
+    selection_metric: str = "delivery"
     results_dir: str = "results"
     workers: int = 1
     save_telemetry: bool = True
